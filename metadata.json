@@ -1,0 +1,8 @@
+{
+  "uuid": "auto-new-windows-to-last-workspace@hjk.local",
+  "name": "Auto New Windows to Last Workspace",
+  "description": "Move newly-created normal windows to the last GNOME workspace.",
+  "settings-schema": "org.gnome.shell.extensions.auto-new-windows-to-last-workspace",
+  "shell-version": ["50"],
+  "version": 1
+}
