@@ -1,16 +1,10 @@
 import GLib from 'gi://GLib';
-import Gio from 'gi://Gio';
 import Meta from 'gi://Meta';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const WINDOW_CREATED_DELAY_MS = 500;
 const WINDOW_CLOSED_DELAY_MS = 150;
-const RULES_CONFIG_PATH = GLib.build_filenamev([
-    GLib.get_user_config_dir(),
-    'auto-new-windows-to-last-workspace',
-    'rules.json',
-]);
 const DEFAULT_RULES = {
     auxiliaryDialogTitles: [
         'file chooser',
@@ -23,12 +17,6 @@ const DEFAULT_RULES = {
         '打开(文件|文件夹|目录)',
         '保存',
     ],
-    sameApplicationAuxiliaryTitles: [
-        'chat history',
-        'image viewer',
-        '图片查看',
-        '聊天记录',
-    ],
     auxiliaryRoles: [
         'dialog',
         'file.?chooser',
@@ -39,23 +27,6 @@ const DEFAULT_RULES = {
     portalIdentifiers: [
         'xdg-desktop-portal',
     ],
-    sourceTargetRules: [
-        {
-            source: [
-                'virt-manager',
-                'org\\.virt-manager',
-                'org\\.virt_manager',
-            ],
-            target: [
-                'virt-manager',
-                'virt-viewer',
-                'remote-viewer',
-                'spicy',
-                'qemu-system',
-                'org\\.virt',
-            ],
-        },
-    ],
 };
 
 export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
@@ -64,6 +35,9 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
         this._windowUnmanagedIds = new Map();
         this._settings = this.getSettings();
         this._rules = this._loadRules();
+        this._settingsChangedId = this._settings.connect('changed::same-workspace-wm-classes', () => {
+            this._rules = this._loadRules();
+        });
         this._windowCreatedId = global.display.connect('window-created', (_display, window) => {
             this._trackWindow(window);
             this._scheduleMove(window, this._getWindowCreationContext());
@@ -77,6 +51,11 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
         if (this._windowCreatedId) {
             global.display.disconnect(this._windowCreatedId);
             this._windowCreatedId = null;
+        }
+
+        if (this._settingsChangedId) {
+            this._settings.disconnect(this._settingsChangedId);
+            this._settingsChangedId = null;
         }
 
         for (const timeoutId of this._timeoutIds)
@@ -93,15 +72,13 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
 
     _loadRules() {
         const settingsRules = this._readSettingsRules();
-        const fileRules = this._readConfiguredRules();
-        const rules = this._mergeRules(this._mergeRules(DEFAULT_RULES, settingsRules), fileRules);
+        const rules = this._mergeRules(DEFAULT_RULES, settingsRules);
 
         return {
             auxiliaryDialogTitles: this._compilePatterns(rules.auxiliaryDialogTitles, 'auxiliaryDialogTitles'),
-            sameApplicationAuxiliaryTitles: this._compilePatterns(rules.sameApplicationAuxiliaryTitles, 'sameApplicationAuxiliaryTitles'),
             auxiliaryRoles: this._compilePatterns(rules.auxiliaryRoles, 'auxiliaryRoles'),
             portalIdentifiers: this._compilePatterns(rules.portalIdentifiers, 'portalIdentifiers'),
-            sourceTargetRules: this._compileSourceTargetRules(rules.sourceTargetRules),
+            sameWorkspaceGroups: this._compilePatternGroups(rules.sameWorkspaceWmClasses, 'sameWorkspaceWmClasses'),
         };
     }
 
@@ -110,51 +87,8 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
             return null;
 
         return {
-            auxiliaryDialogTitles: this._settings.get_strv('auxiliary-dialog-titles'),
-            sameApplicationAuxiliaryTitles: this._settings.get_strv('same-application-auxiliary-titles'),
-            auxiliaryRoles: this._settings.get_strv('auxiliary-roles'),
-            portalIdentifiers: this._settings.get_strv('portal-identifiers'),
-            sourceTargetRules: this._parseSourceTargetRules(this._settings.get_string('source-target-rules'), 'GSettings source-target-rules'),
+            sameWorkspaceWmClasses: this._settings.get_strv('same-workspace-wm-classes'),
         };
-    }
-
-    _readConfiguredRules() {
-        const file = Gio.File.new_for_path(RULES_CONFIG_PATH);
-        if (!file.query_exists(null))
-            return null;
-
-        try {
-            const [, contents] = file.load_contents(null);
-            return this._normalizeConfiguredRules(JSON.parse(new TextDecoder().decode(contents)));
-        } catch (error) {
-            console.warn(`Failed to load ${RULES_CONFIG_PATH}: ${error.message}`);
-            return null;
-        }
-    }
-
-    _normalizeConfiguredRules(rules) {
-        if (!rules || typeof rules !== 'object')
-            return null;
-
-        return {
-            auxiliaryDialogTitles: rules.auxiliaryDialogTitles,
-            sameApplicationAuxiliaryTitles: rules.sameApplicationAuxiliaryTitles,
-            auxiliaryRoles: rules.auxiliaryRoles,
-            portalIdentifiers: rules.portalIdentifiers,
-            sourceTargetRules: rules.sourceTargetRules,
-        };
-    }
-
-    _parseSourceTargetRules(value, source) {
-        try {
-            const rules = JSON.parse(value || '[]');
-            if (Array.isArray(rules))
-                return rules;
-        } catch (error) {
-            console.warn(`Failed to parse ${source}: ${error.message}`);
-        }
-
-        return [];
     }
 
     _mergeRules(defaultRules, configuredRules) {
@@ -163,10 +97,9 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
 
         return {
             auxiliaryDialogTitles: this._mergeStringArrays(defaultRules.auxiliaryDialogTitles, configuredRules.auxiliaryDialogTitles),
-            sameApplicationAuxiliaryTitles: this._mergeStringArrays(defaultRules.sameApplicationAuxiliaryTitles, configuredRules.sameApplicationAuxiliaryTitles),
             auxiliaryRoles: this._mergeStringArrays(defaultRules.auxiliaryRoles, configuredRules.auxiliaryRoles),
             portalIdentifiers: this._mergeStringArrays(defaultRules.portalIdentifiers, configuredRules.portalIdentifiers),
-            sourceTargetRules: this._mergeSourceTargetRules(defaultRules.sourceTargetRules, configuredRules.sourceTargetRules),
+            sameWorkspaceWmClasses: this._mergeStringArrays(defaultRules.sameWorkspaceWmClasses ?? [], configuredRules.sameWorkspaceWmClasses),
         };
     }
 
@@ -175,16 +108,6 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
             return defaultValues;
 
         return [...defaultValues, ...configuredValues.filter(value => typeof value === 'string')];
-    }
-
-    _mergeSourceTargetRules(defaultRules, configuredRules) {
-        if (!Array.isArray(configuredRules))
-            return defaultRules;
-
-        return [
-            ...defaultRules,
-            ...configuredRules.filter(rule => Array.isArray(rule?.source) && Array.isArray(rule?.target)),
-        ];
     }
 
     _compilePatterns(patterns, name) {
@@ -201,11 +124,16 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
         });
     }
 
-    _compileSourceTargetRules(rules) {
-        return rules.map(rule => ({
-            source: this._compilePatterns(rule.source, 'sourceTargetRules.source'),
-            target: this._compilePatterns(rule.target, 'sourceTargetRules.target'),
-        })).filter(rule => rule.source.length > 0 && rule.target.length > 0);
+    _compilePatternGroups(groups, name) {
+        return groups.map((group, index) => {
+            if (typeof group !== 'string')
+                return [];
+
+            return this._compilePatterns(group
+                .split(',')
+                .map(pattern => pattern.trim())
+                .filter(Boolean), `${name}[${index}]`);
+        }).filter(group => group.length > 0);
     }
 
     _trackWindow(window) {
@@ -254,7 +182,8 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
         if (this._shouldStayOnSourceWorkspace(window, context))
             return;
 
-        const targetWorkspace = this._getNextWorkspaceAfterLastNonEmpty(window);
+        const targetWorkspace = this._getConfiguredWmClassWorkspace(window)
+            ?? this._getNextWorkspaceAfterLastNonEmpty(window);
 
         if (!targetWorkspace) {
             if (this._settings?.get_boolean('keep-focus-on-current-window')) {
@@ -405,41 +334,45 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
         if (this._hasAuxiliaryDialogRoleOrTitle(window))
             return true;
 
-        const focusWindow = context.focusWindow;
-        if (!focusWindow || focusWindow === window)
-            return false;
-
-        if (this._isVirtualMachineWindowFromManager(window, focusWindow))
-            return true;
-
-        return this._isSameApplicationWindow(window, focusWindow)
-            && this._hasSameApplicationAuxiliaryTitle(window);
+        return false;
     }
 
     _isPortalWindow(window) {
         return this._matchesPatterns(this._getWindowIdentifiers(window), this._rules.portalIdentifiers);
     }
 
-    _isSameApplicationWindow(window, otherWindow) {
-        const identifiers = new Set(this._getWindowIdentifiers(window));
-        return this._getWindowIdentifiers(otherWindow).some(identifier => identifiers.has(identifier));
+    _getConfiguredWmClassWorkspace(window) {
+        const matchingGroup = this._getMatchingWorkspaceGroup(window);
+        if (!matchingGroup)
+            return null;
+
+        for (const actor of global.get_window_actors()) {
+            const otherWindow = actor.meta_window;
+            if (otherWindow === window || !this._isNormalTopLevelWindow(otherWindow))
+                continue;
+
+            if (this._matchesPatterns(this._getWorkspaceGroupingValues(otherWindow), matchingGroup))
+                return otherWindow.get_workspace();
+        }
+
+        return null;
     }
 
-    _isVirtualMachineWindowFromManager(window, focusWindow) {
-        return this._rules.sourceTargetRules.some(rule => {
-            return this._matchesWindowMetadata(focusWindow, rule.source)
-                && this._matchesWindowMetadata(window, rule.target);
-        });
+    _getMatchingWorkspaceGroup(window) {
+        const values = this._getWorkspaceGroupingValues(window);
+        return this._rules.sameWorkspaceGroups.find(group => {
+            return this._matchesPatterns(values, group);
+        }) ?? null;
     }
 
-    _matchesWindowMetadata(window, patterns) {
-        const metadata = [
-            ...this._getWindowIdentifiers(window),
-            this._callStringGetter(window, 'get_wm_window_role'),
+    _getWorkspaceGroupingValues(window) {
+        return [
+            this._callStringGetter(window, 'get_gtk_application_id'),
+            this._callStringGetter(window, 'get_sandboxed_app_id'),
+            this._callStringGetter(window, 'get_wm_class'),
+            this._callStringGetter(window, 'get_wm_class_instance'),
             window.get_title?.() ?? null,
         ].filter(Boolean);
-
-        return this._matchesPatterns(metadata, patterns);
     }
 
     _matchesPatterns(values, patterns) {
@@ -453,11 +386,6 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
 
         const title = window.get_title?.() ?? '';
         return this._matchesPatterns([title], this._rules.auxiliaryDialogTitles);
-    }
-
-    _hasSameApplicationAuxiliaryTitle(window) {
-        const title = window.get_title?.() ?? '';
-        return this._matchesPatterns([title], this._rules.sameApplicationAuxiliaryTitles);
     }
 
     _getWindowIdentifiers(window) {

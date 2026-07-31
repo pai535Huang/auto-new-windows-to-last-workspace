@@ -1,35 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.auto-new-windows-to-last-workspace" path="/org/gnome/shell/extensions/auto-new-windows-to-last-workspace/">
-    <key name="auxiliary-dialog-titles" type="as">
-      <default>[]</default>
-      <summary>Auxiliary dialog title patterns</summary>
-      <description>Case-insensitive regular expressions. Matching windows stay on the source workspace.</description>
-    </key>
-    <key name="same-application-auxiliary-titles" type="as">
-      <default>[]</default>
-      <summary>Same-application auxiliary title patterns</summary>
-      <description>Case-insensitive regular expressions. Matching same-application windows stay on the source workspace.</description>
-    </key>
-    <key name="auxiliary-roles" type="as">
-      <default>[]</default>
-      <summary>Auxiliary window role patterns</summary>
-      <description>Case-insensitive regular expressions for window roles that should stay on the source workspace.</description>
-    </key>
-    <key name="portal-identifiers" type="as">
-      <default>[]</default>
-      <summary>Portal identifier patterns</summary>
-      <description>Case-insensitive regular expressions for portal-like app ids or window classes.</description>
-    </key>
-    <key name="source-target-rules" type="s">
-      <default>'[]'</default>
-      <summary>Source-target rules</summary>
-      <description>JSON array of objects with source and target regex arrays. Matching target windows opened from matching source windows stay on the source workspace.</description>
-    </key>
     <key name="keep-focus-on-current-window" type="b">
       <default>false</default>
       <summary>Keep focus on the current window</summary>
       <description>When enabled, newly opened windows are moved without switching focus to them.</description>
+    </key>
+    <key name="same-workspace-wm-classes" type="as">
+      <default>[]</default>
+      <summary>Window patterns that share a workspace</summary>
+      <description>Case-insensitive regular expressions. Windows with matching WM_CLASS, app ID, or title are placed on the same workspace.</description>
     </key>
   </schema>
 </schemalist>

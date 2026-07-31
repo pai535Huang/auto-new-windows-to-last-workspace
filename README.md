@@ -8,54 +8,29 @@ After moving a window, the extension switches to that window's workspace and foc
 
 When closing a window leaves the current workspace empty, the extension switches to the nearest non-empty workspace on the left, or the nearest non-empty workspace on the right if there is none on the left, and asks GNOME to remove the empty workspace.
 
-It skips transient windows, attached dialogs, non-normal window types, windows hidden from taskbar/pager lists, and windows shown on all workspaces. It also keeps xdg-desktop-portal dialogs and same-application auxiliary windows, such as file pickers, image viewers, and chat history windows, on the workspace where they were opened. Virtual machine viewer windows opened from Virtual Machine Manager are kept on the manager's workspace as well.
+It skips transient windows, attached dialogs, non-normal window types, windows hidden from taskbar/pager lists, and windows shown on all workspaces. It also keeps xdg-desktop-portal dialogs and file picker windows on the workspace where they were opened.
 
 ## Rules
 
-Extra rules can be added without editing the extension code. Open the extension preferences from GNOME Extensions, or run:
+Open the extension preferences from GNOME Extensions, or run:
 
 ```sh
 gnome-extensions prefs auto-new-windows-to-last-workspace@hjk.local
 ```
 
-Rules entered in the settings UI are appended to the built-in defaults. Restart or reload the extension after changing rules.
+Enable `Keep Current Focus` to move new windows without switching focus to them.
 
-The settings UI also has a switch named "保持当前焦点". When enabled, newly opened windows are moved without immediately switching focus to them.
+Add one window group per line. Each group can contain multiple aliases separated by English commas. Aliases are case-insensitive regular expressions that match `WM_CLASS`, app ID, or window title. Windows matching the same line are placed on the same workspace. Different lines are handled independently, so opening QQ and then WeChat can still create separate workspaces.
 
-Advanced rules can also be added in:
+Examples:
 
-```sh
-~/.config/auto-new-windows-to-last-workspace/rules.json
+```text
+wechat, WeChat
+qq
+virt-manager
 ```
 
-Example:
-
-```json
-{
-  "auxiliaryDialogTitles": [
-    "preferences",
-    "settings"
-  ],
-  "sameApplicationAuxiliaryTitles": [
-    "logs",
-    "preview"
-  ],
-  "auxiliaryRoles": [
-    "utility"
-  ],
-  "portalIdentifiers": [
-    "xdg-desktop-portal"
-  ],
-  "sourceTargetRules": [
-    {
-      "source": ["main-app-class"],
-      "target": ["helper-app-class", "helper window title"]
-    }
-  ]
-}
-```
-
-All strings are regular expressions matched case-insensitively. File rules are appended after the built-in defaults and settings UI rules.
+Duplicate aliases are harmless but unnecessary. Chinese commas are not separators. If no existing window matches the same line, the new window is handled like a normal new window. Rule changes apply immediately.
 
 ## Install
 
