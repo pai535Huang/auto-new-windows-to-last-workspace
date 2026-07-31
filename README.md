@@ -10,6 +10,14 @@ When closing a window leaves the current workspace empty, the extension switches
 
 It skips transient windows, attached dialogs, non-normal window types, windows hidden from taskbar/pager lists, and windows shown on all workspaces. It also keeps xdg-desktop-portal dialogs and file picker windows on the workspace where they were opened.
 
+## Features
+
+- Move new top-level app windows to the next workspace.
+- Keep dialog-like windows, portal windows, and file pickers on the source workspace.
+- Group related windows by configurable window aliases.
+- Optionally keep focus on the current window when new windows open.
+- Apply rule changes immediately from the preferences window.
+
 ## Rules
 
 Open the extension preferences from GNOME Extensions, or run:
@@ -20,7 +28,7 @@ gnome-extensions prefs auto-new-windows-to-last-workspace@hjk.local
 
 Enable `Keep Current Focus` to move new windows without switching focus to them.
 
-Add one window group per line. Each group can contain multiple aliases separated by English commas. Aliases are case-insensitive regular expressions that match `WM_CLASS`, app ID, or window title. Windows matching the same line are placed on the same workspace. Different lines are handled independently, so opening QQ and then WeChat can still create separate workspaces.
+Add one window group per line. Each group can contain multiple aliases separated by English commas. Aliases match `WM_CLASS`, app ID, or window title. Plain aliases are case-insensitive exact matches, so `code` does not match `opencode`. Wrap an alias in slashes to use a regular expression. Windows matching the same line are placed on the same workspace.
 
 Examples:
 
@@ -28,6 +36,7 @@ Examples:
 wechat, WeChat
 qq
 virt-manager
+/.*preview.*/
 ```
 
 Duplicate aliases are harmless but unnecessary. Chinese commas are not separators. If no existing window matches the same line, the new window is handled like a normal new window. Rule changes apply immediately.

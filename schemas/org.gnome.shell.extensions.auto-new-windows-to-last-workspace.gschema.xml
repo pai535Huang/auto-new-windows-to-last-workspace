@@ -9,7 +9,7 @@
     <key name="same-workspace-wm-classes" type="as">
       <default>[]</default>
       <summary>Window patterns that share a workspace</summary>
-      <description>Case-insensitive regular expressions. Windows with matching WM_CLASS, app ID, or title are placed on the same workspace.</description>
+      <description>Case-insensitive aliases. Plain aliases match exactly; aliases wrapped in slashes are treated as regular expressions.</description>
     </key>
   </schema>
 </schemalist>

@@ -129,11 +129,29 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
             if (typeof group !== 'string')
                 return [];
 
-            return this._compilePatterns(group
+            return this._compileUserPatterns(group
                 .split(',')
                 .map(pattern => pattern.trim())
                 .filter(Boolean), `${name}[${index}]`);
         }).filter(group => group.length > 0);
+    }
+
+    _compileUserPatterns(patterns, name) {
+        return patterns.flatMap(pattern => {
+            try {
+                if (pattern.startsWith('/') && pattern.endsWith('/') && pattern.length > 1)
+                    return [new RegExp(pattern.slice(1, -1), 'i')];
+
+                return [new RegExp(`^${this._escapeRegExp(pattern)}$`, 'i')];
+            } catch (error) {
+                console.warn(`Ignoring invalid ${name} pattern ${JSON.stringify(pattern)}: ${error.message}`);
+                return [];
+            }
+        });
+    }
+
+    _escapeRegExp(value) {
+        return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
     _trackWindow(window) {
