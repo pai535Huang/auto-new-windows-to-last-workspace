@@ -17,7 +17,7 @@ It leaves the first window after login on the first workspace, keeps dialog-like
 Open the extension preferences from GNOME Extensions, or run:
 
 ```sh
-gnome-extensions prefs auto-new-windows-to-last-workspace@hjk.local
+gnome-extensions prefs auto-new-windows-to-last-workspace@pai535Huang
 ```
 
 Enable `Keep Current Focus` to move new windows without switching focus to them.
@@ -40,19 +40,19 @@ Duplicate aliases are harmless but unnecessary. Chinese commas are not separator
 This source directory can be symlinked into:
 
 ```sh
-~/.local/share/gnome-shell/extensions/auto-new-windows-to-last-workspace@hjk.local
+~/.local/share/gnome-shell/extensions/auto-new-windows-to-last-workspace@pai535Huang
 ```
 
 Compile the settings schema if the extension is installed from this source directory:
 
 ```sh
-glib-compile-schemas ~/.local/share/gnome-shell/extensions/auto-new-windows-to-last-workspace@hjk.local/schemas
+glib-compile-schemas ~/.local/share/gnome-shell/extensions/auto-new-windows-to-last-workspace@pai535Huang/schemas
 ```
 
 Then enable it with:
 
 ```sh
-gnome-extensions enable auto-new-windows-to-last-workspace@hjk.local
+gnome-extensions enable auto-new-windows-to-last-workspace@pai535Huang
 ```
 
 On Wayland, log out and log back in if GNOME does not load the new extension immediately.
