@@ -32,11 +32,16 @@ const DEFAULT_RULES = {
 export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
     enable() {
         this._timeoutIds = new Set();
+        this._windowMoveTimeoutIds = new Map();
         this._windowUnmanagedIds = new Map();
+        this._focusMru = [];
         this._settings = this.getSettings();
         this._rules = this._loadRules();
         this._settingsChangedId = this._settings.connect('changed::same-workspace-wm-classes', () => {
             this._rules = this._loadRules();
+        });
+        this._focusChangedId = global.display.connect('notify::focus-window', () => {
+            this._recordFocus(global.display.get_focus_window?.() ?? null);
         });
         this._windowCreatedId = global.display.connect('window-created', (_display, window) => {
             this._trackWindow(window);
@@ -45,6 +50,8 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
 
         for (const actor of global.get_window_actors())
             this._trackWindow(actor.meta_window);
+
+        this._recordFocus(global.display.get_focus_window?.() ?? null);
     }
 
     disable() {
@@ -58,6 +65,11 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
             this._settingsChangedId = null;
         }
 
+        if (this._focusChangedId) {
+            global.display.disconnect(this._focusChangedId);
+            this._focusChangedId = null;
+        }
+
         for (const timeoutId of this._timeoutIds)
             GLib.Source.remove(timeoutId);
 
@@ -65,7 +77,9 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
             window.disconnect(unmanagedId);
 
         this._timeoutIds.clear();
+        this._windowMoveTimeoutIds.clear();
         this._windowUnmanagedIds.clear();
+        this._focusMru = [];
         this._settings = null;
         this._rules = null;
     }
@@ -159,11 +173,69 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
             return;
 
         const unmanagedId = window.connect('unmanaged', () => {
+            const workspace = window.get_workspace?.() ?? null;
+            const returnsFocus = this._wasMostRecentlyFocused(window);
+
+            this._removeFromFocusMru(window);
+            this._cancelScheduledMove(window);
             this._windowUnmanagedIds.delete(window);
-            this._scheduleEmptyWorkspaceCleanup();
+            this._scheduleEmptyWorkspaceCleanup(workspace, returnsFocus);
         });
 
         this._windowUnmanagedIds.set(window, unmanagedId);
+    }
+
+    _recordFocus(window) {
+        if (!window || !this._isNormalTopLevelWindow(window))
+            return;
+
+        const mru = this._focusMru ?? [];
+        const index = mru.indexOf(window);
+        if (index >= 0)
+            mru.splice(index, 1);
+
+        mru.unshift(window);
+        if (mru.length > 16)
+            mru.length = 16;
+
+        this._focusMru = mru;
+    }
+
+    _removeFromFocusMru(window) {
+        const index = this._focusMru?.indexOf(window) ?? -1;
+        if (index < 0)
+            return;
+
+        this._focusMru.splice(index, 1);
+    }
+
+    _wasMostRecentlyFocused(window) {
+        if (this._focusMru?.[0] === window)
+            return true;
+
+        return global.display.get_focus_window?.() === window;
+    }
+
+    _getPreviousFocusWindow() {
+        for (const window of this._focusMru ?? []) {
+            if (window?.get_compositor_private?.())
+                return window;
+        }
+
+        return null;
+    }
+
+    _restorePreviousFocus(emptyWorkspace = null) {
+        const previousWindow = this._getPreviousFocusWindow();
+        if (!previousWindow)
+            return false;
+
+        this._focusWindow(previousWindow);
+
+        if (emptyWorkspace)
+            this._removeWorkspaceIfStillEmpty(emptyWorkspace, global.get_current_time());
+
+        return true;
     }
 
     _getWindowCreationContext() {
@@ -174,19 +246,33 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
     }
 
     _scheduleMove(window, context) {
+        this._cancelScheduledMove(window);
+
         const timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, WINDOW_CREATED_DELAY_MS, () => {
             this._timeoutIds.delete(timeoutId);
+            this._windowMoveTimeoutIds.delete(window);
             this._moveWindow(window, context);
             return GLib.SOURCE_REMOVE;
         });
 
         this._timeoutIds.add(timeoutId);
+        this._windowMoveTimeoutIds.set(window, timeoutId);
     }
 
-    _scheduleEmptyWorkspaceCleanup() {
+    _cancelScheduledMove(window) {
+        const timeoutId = this._windowMoveTimeoutIds.get(window);
+        if (!timeoutId)
+            return;
+
+        GLib.Source.remove(timeoutId);
+        this._timeoutIds.delete(timeoutId);
+        this._windowMoveTimeoutIds.delete(window);
+    }
+
+    _scheduleEmptyWorkspaceCleanup(emptyWorkspace, restoreFocus = false) {
         const timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, WINDOW_CLOSED_DELAY_MS, () => {
             this._timeoutIds.delete(timeoutId);
-            this._moveLeftIfCurrentWorkspaceIsEmpty();
+            this._moveLeftIfCurrentWorkspaceIsEmpty(emptyWorkspace, restoreFocus);
             return GLib.SOURCE_REMOVE;
         });
 
@@ -194,11 +280,18 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
     }
 
     _moveWindow(window, context) {
+        if (window?.get_compositor_private?.() === null)
+            return;
+
         if (!this._isNormalTopLevelWindow(window))
             return;
 
-        if (this._shouldStayOnSourceWorkspace(window, context))
+        if (this._shouldStayOnSourceWorkspace(window, context)) {
+            if (this._settings?.get_boolean('keep-focus-on-current-window'))
+                this._restoreFocus(context);
+
             return;
+        }
 
         const targetWorkspace = this._getConfiguredWmClassWorkspace(window)
             ?? this._getNextWorkspaceAfterLastNonEmpty(window);
@@ -245,11 +338,21 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
         window.activate(time);
     }
 
-    _moveLeftIfCurrentWorkspaceIsEmpty() {
+    _moveLeftIfCurrentWorkspaceIsEmpty(emptyWorkspace = null, restoreFocus = false) {
         const workspaceManager = global.workspace_manager;
-        const emptyWorkspace = workspaceManager.get_active_workspace();
+        const activeWorkspace = workspaceManager.get_active_workspace();
+        emptyWorkspace ??= workspaceManager.get_active_workspace();
 
         if (!emptyWorkspace || this._workspaceHasNormalWindow(emptyWorkspace, null))
+            return;
+
+        const time = global.get_current_time();
+        if (emptyWorkspace !== activeWorkspace) {
+            this._removeWorkspaceIfStillEmpty(emptyWorkspace, time);
+            return;
+        }
+
+        if (restoreFocus && this._restorePreviousFocus(emptyWorkspace))
             return;
 
         const emptyWorkspaceIndex = emptyWorkspace.index();
@@ -259,7 +362,6 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
         if (!targetWorkspace)
             return;
 
-        const time = global.get_current_time();
         targetWorkspace.activate(time);
         this._removeWorkspaceIfStillEmpty(emptyWorkspace, time);
     }
@@ -398,7 +500,8 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
     }
 
     _hasAuxiliaryDialogRoleOrTitle(window) {
-        const role = this._callStringGetter(window, 'get_wm_window_role');
+        const role = this._callStringGetter(window, 'get_role')
+            ?? this._callStringGetter(window, 'get_wm_window_role');
         if (role && this._matchesPatterns([role], this._rules.auxiliaryRoles))
             return true;
 

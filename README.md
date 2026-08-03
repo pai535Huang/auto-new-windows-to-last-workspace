@@ -6,7 +6,7 @@ GNOME dynamic workspaces usually keep an empty placeholder workspace at the end.
 
 After moving a window, the extension switches to that window's workspace and focuses the new window.
 
-When closing a window leaves the current workspace empty, the extension switches to the nearest non-empty workspace on the left, or the nearest non-empty workspace on the right if there is none on the left, and asks GNOME to remove the empty workspace.
+When closing a window leaves the current workspace empty, the extension restores focus to the previously focused window and switches to that window's workspace, like a stacking window manager. If there is no other window to return to, it switches to the nearest non-empty workspace on the left, or the nearest non-empty workspace on the right if there is none on the left, and asks GNOME to remove the empty workspace.
 
 It skips transient windows, attached dialogs, non-normal window types, windows hidden from taskbar/pager lists, and windows shown on all workspaces. It also keeps xdg-desktop-portal dialogs and file picker windows on the workspace where they were opened.
 
@@ -49,16 +49,16 @@ This source directory can be symlinked into:
 ~/.local/share/gnome-shell/extensions/auto-new-windows-to-last-workspace@hjk.local
 ```
 
-Then enable it with:
-
-```sh
-gnome-extensions enable auto-new-windows-to-last-workspace@hjk.local
-```
-
 Compile the settings schema if the extension is installed from this source directory:
 
 ```sh
 glib-compile-schemas ~/.local/share/gnome-shell/extensions/auto-new-windows-to-last-workspace@hjk.local/schemas
+```
+
+Then enable it with:
+
+```sh
+gnome-extensions enable auto-new-windows-to-last-workspace@hjk.local
 ```
 
 On Wayland, log out and log back in if GNOME does not load the new extension immediately.
