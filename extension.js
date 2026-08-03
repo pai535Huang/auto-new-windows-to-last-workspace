@@ -153,10 +153,7 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
     _compileUserPatterns(patterns, name) {
         return patterns.flatMap(pattern => {
             try {
-                if (pattern.startsWith('/') && pattern.endsWith('/') && pattern.length > 1)
-                    return [new RegExp(pattern.slice(1, -1), 'i')];
-
-                return [new RegExp(`^${this._escapeRegExp(pattern)}$`, 'i')];
+                return [new RegExp(this._wildcardToRegex(pattern), 'i')];
             } catch (error) {
                 console.warn(`Ignoring invalid ${name} pattern ${JSON.stringify(pattern)}: ${error.message}`);
                 return [];
@@ -164,8 +161,9 @@ export default class AutoNewWindowsToLastWorkspaceExtension extends Extension {
         });
     }
 
-    _escapeRegExp(value) {
-        return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    _wildcardToRegex(pattern) {
+        const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+        return `^${escaped.replace(/\*/g, '.*').replace(/\?/g, '.')}$`;
     }
 
     _trackWindow(window) {

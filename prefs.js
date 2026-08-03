@@ -36,7 +36,7 @@ export default class AutoNewWindowsToLastWorkspacePreferences extends ExtensionP
         const textView = this._createTextView(settings.get_strv('same-workspace-wm-classes').join('\n'));
         const group = new Adw.PreferencesGroup({
             title: 'Workspace Grouping',
-            description: 'One group per line. Use commas for aliases. Plain aliases match exactly; /regex/ matches patterns.',
+            description: 'One group per line. Use commas for aliases. Use * to match any sequence of characters (e.g., code* or *code*), and ? for a single one.',
         });
 
         textView.buffer.connect('changed', buffer => {

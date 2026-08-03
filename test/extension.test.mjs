@@ -411,3 +411,46 @@ test('empty-workspace cleanup does not switch away when a different workspace is
     assert.equal(activatedWorkspace, null);
     assert.equal(removedWorkspace, closedWorkspace);
 });
+
+test('user patterns use wildcards like Blur My Shell blacklist', () => {
+    const {extension} = createExtension();
+    const compile = pattern => extension._compileUserPatterns([pattern], 'test')[0];
+    const matches = (pattern, value) => compile(pattern).test(value);
+
+    assert.equal(matches('code', 'code'), true);
+    assert.equal(matches('code', 'Code'), true);
+    assert.equal(matches('code', 'code-oss'), false);
+    assert.equal(matches('code', 'opencode'), false);
+
+    assert.equal(matches('Code*', 'Code-oss'), true);
+    assert.equal(matches('Code*', 'code'), true);
+    assert.equal(matches('Code*', 'opencode'), false);
+
+    assert.equal(matches('*kitty*', 'kitty'), true);
+    assert.equal(matches('*kitty*', 'opencodekitty'), true);
+    assert.equal(matches('*kitty*', 'wezterm'), false);
+
+    assert.equal(matches('xterm?', 'xtermX'), true);
+    assert.equal(matches('xterm?', 'xtermXlong'), false);
+});
+
+test('workspace groups compile each comma-separated alias to a wildcard pattern', () => {
+    const {extension} = createExtension();
+    const groups = extension._compilePatternGroups([
+        'wechat, WeChat',
+        'virt-manager, *manager*',
+    ], 'test');
+
+    assert.equal(groups.length, 2);
+    assert.equal(groups[0].length, 2);
+    assert.equal(groups[1].length, 2);
+
+    const match = (group, value) => group.some(pattern => pattern.test(value));
+    assert.equal(match(groups[0], 'wechat'), true);
+    assert.equal(match(groups[0], 'WeChat'), true);
+    assert.equal(match(groups[0], 'wechatx'), false);
+    assert.equal(match(groups[1], 'virt-manager'), true);
+    assert.equal(match(groups[1], 'other-app'), false);
+    assert.equal(match(groups[1], 'virt-managerX'), true);
+    assert.equal(match(groups[1], 'everything-manager'), true);
+});

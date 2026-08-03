@@ -9,7 +9,7 @@
     <key name="same-workspace-wm-classes" type="as">
       <default>[]</default>
       <summary>Window patterns that share a workspace</summary>
-      <description>Case-insensitive aliases. Plain aliases match exactly; aliases wrapped in slashes are treated as regular expressions.</description>
+      <description>Case-insensitive wildcard patterns. Use * to match any sequence of characters (e.g., code* or *code*), and ? for a single one.</description>
     </key>
   </schema>
 </schemalist>
